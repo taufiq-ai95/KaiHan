@@ -1,0 +1,244 @@
+//CICISCOM JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=64M,NOTIFY=&SYSUID      JOB44335
+//*--------------------------------------------------------------------
+//**ESMR 2019-1394 CONTROL FILES FOR CUSTOMER CIS AND IDIC
+//*--------------------------------------------------------------------
+//STATS#01 EXEC SAS609
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK05  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK06  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK07  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK08  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK09  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK10  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//CISFILE  DD DISP=SHR,DSN=RBP2.B033.CIS.CUST.DAILY
+//INDFILE  DD DISP=SHR,DSN=RBP2.B033.CIS.IDIC.DAILY.INDV
+//DEMOFILE DD DISP=SHR,DSN=RBP2.B033.BANKCTRL.DEMOCODE
+//*IDETXAC DD DUMMY
+//CTRLDATE DD DISP=SHR,DSN=RBP2.B033.SRSCTRL1(0)
+//OUTFILE  DD DSN=RBP2.B033.COMBINE.CUST.ALL(+1),
+//            DISP=(NEW,CATLG,DELETE),UNIT=SYSDA,
+//            SPACE=(CYL,(1000,1000),RLSE),
+//            DCB=(LRECL=1000,BLKSIZE=0,RECFM=FB)
+//SASLIST  DD SYSOUT=X
+//SYSIN    DD *
+DATA GETDATE;
+     FORMAT XX Z6.;
+     TM=TIME();
+     XX=COMPRESS(PUT (TM,TIME8.),':');
+     CALL SYMPUT('TIMEX', PUT(XX,Z6.));
+RUN;
+PROC PRINT;RUN;
+ /*----------------------------------------------------------------*/
+ /*    SET DATES                                                   */
+ /*----------------------------------------------------------------*/
+    DATA SRSDATE;
+          INFILE CTRLDATE;
+            INPUT @001  SRSYY    4.
+                  @005  SRSMM    2.
+                  @007  SRSDD    2.;
+
+          /* DISPLAY TODAY REPORTING DATE*/
+          TODAYSAS=MDY(SRSMM,SRSDD,SRSYY);
+          CALL SYMPUT('DATE1',PUT(TODAYSAS,8.));
+          CALL SYMPUT('YEAR' ,PUT(SRSYY,Z4.));
+          CALL SYMPUT('MONTH',PUT(SRSMM,Z2.));
+          CALL SYMPUT('DAY'  ,PUT(SRSDD,Z2.));
+    RUN;
+   PROC PRINT;RUN;
+  /*TO CHANGE STATUS*/
+
+DATA CIS;
+   FORMAT CUSTNOX $20. CUSTOPEN $11.;
+   KEEP CUSTNOX ADDREFX CUSTNAME PRIPHONEX SECPHONEX MOBILEPHX FAXX
+   ALIASKEY ALIAS PROCESSTIME CUSTSTAT TAXCODE TAXID CUSTBRCH COSTCTR
+   CUSTMNTDATE CUSTLASTOPER PRIM_OFF SEC_OFF PRIM_LN_OFF SEC_LN_OFF
+   RACE RESIDENCY CITIZENSHIP OPENDT HRCALL EXPERIENCE HOBBIES RELIGION
+   LANGUAGE INST_SEC CUST_CODE CUSTCONSENT BASICGRPCODE MSICCODE
+   MASCO2008 INCOME EDUCATION OCCUP MARITALSTAT OWNRENT EMPNAME DOBDOR
+   SICCODE CORPSTATUS NETWORTH BNMID LONGNAME INDORG;
+   SET CISFILE.CUSTDLY;
+
+         HRC01C= PUT(HRC01,Z3.);
+         HRC02C= PUT(HRC02,Z3.);
+         HRC03C= PUT(HRC03,Z3.);
+         HRC04C= PUT(HRC04,Z3.);
+         HRC05C= PUT(HRC05,Z3.);
+         HRC06C= PUT(HRC06,Z3.);
+         HRC07C= PUT(HRC07,Z3.);
+         HRC08C= PUT(HRC08,Z3.);
+         HRC09C= PUT(HRC09,Z3.);
+         HRC10C= PUT(HRC10,Z3.);
+         HRC11C= PUT(HRC11,Z3.);
+         HRC12C= PUT(HRC12,Z3.);
+         HRC13C= PUT(HRC13,Z3.);
+         HRC14C= PUT(HRC14,Z3.);
+         HRC15C= PUT(HRC15,Z3.);
+         HRC16C= PUT(HRC16,Z3.);
+         HRC17C= PUT(HRC17,Z3.);
+         HRC18C= PUT(HRC18,Z3.);
+         HRC19C= PUT(HRC19,Z3.);
+         HRC20C= PUT(HRC20,Z3.);
+   HRCALL = COMPRESS(HRC01C||HRC02C||HRC03C||HRC04C||HRC05C||
+                     HRC06C||HRC07C||HRC08C||HRC09C||HRC10C||
+                     HRC11C||HRC12C||HRC13C||HRC14C||HRC15C||
+                     HRC16C||HRC17C||HRC18C||HRC19C||HRC20C);
+   CUSTNOX = CUSTNO;
+   PRIPHONEX = PUT(PRIPHONE,Z11.);
+   SECPHONEX = PUT(SECPHONE,Z11.);
+   MOBILEPHX = PUT(MOBILEPH,Z11.);
+   FAXX      = PUT(FAX,Z11.);
+   ADDREFX   = PUT(ADDREF,Z11.);
+   CUSTOPEN=CUSTOPENDATE;
+   CUSTOPEN=TRANSLATE(CUSTOPEN,'0',' ');
+   IF SUBSTR(CUSTOPEN,1,1) = ' ' THEN SUBSTR(CUSTOPEN,1,1) = '0';
+   OPENMM=SUBSTR(CUSTOPEN,1,2);
+   OPENDD=SUBSTR(CUSTOPEN,3,2);
+   OPENYY=SUBSTR(CUSTOPEN,5,4);
+   OPENDT=COMPRESS(OPENYY||OPENMM||OPENDD);
+   IF CUSTOPEN = '00002000000' THEN OPENDT = '20000101';
+   RUN ;
+PROC SORT  DATA=CIS NODUPKEY; BY CUSTNOX ;RUN;
+PROC PRINT DATA=CIS(OBS=5);TITLE 'CIS';RUN;
+
+DATA SALES RESTR CITZN;
+        INFILE DEMOFILE ;
+        INPUT @05  DEMOCATEGORY  $5.
+              @10  DEMOCODE      $3.
+              @10  DEMOCODX      $2.
+              @40  CODEDESC     $20.;
+
+        IF DEMOCATEGORY = 'RESTR' THEN DO;
+           RESTR = DEMOCODE;
+           RESDESC   = CODEDESC;
+           OUTPUT RESTR;
+        END;
+        IF DEMOCATEGORY = 'SALES' THEN DO;
+           SALES = DEMOCODE;
+           SALDESC   = CODEDESC;
+           OUTPUT SALES;
+        END;
+        IF DEMOCATEGORY = 'CITZN' THEN DO;
+           CITZN = DEMOCODX;
+           CTZDESC   = CODEDESC;
+           OUTPUT CITZN;
+        END;
+RUN;
+PROC SORT  DATA=SALES NODUPKEY; BY SALES;RUN;
+PROC SORT  DATA=RESTR NODUPKEY; BY RESTR;RUN;
+PROC SORT  DATA=CITZN NODUPKEY; BY CITZN;RUN;
+
+ DATA INDV;
+    SET INDFILE.INDVDLY;
+    KEEP CUSTNO IDTYPE ID CUSTBRANCH LAST_UPDATE_DATE
+         LAST_UPDATE_TIME LAST_UPDATE_OPER PRCOUNTRY
+         EMPLOYMENT_TYPE EMPLOYMENT_SECTOR EMPLOYMENT_LAST_UPDATE;
+    /* IF ENABLE_TAB = 'Y'; */
+ RUN;
+ PROC SORT  DATA=INDV NODUPKEY; BY CUSTNO DESCENDING LAST_UPDATE_DATE;
+
+ DATA INDVX;
+    SET INDV;
+        IF CUSTNO = ' ' THEN DELETE;
+        CUSTNOX = CUSTNO;
+    RUN;
+ PROC SORT  DATA=INDVX NODUPKEY; BY CUSTNOX;
+
+ DATA MRGCIS;
+      MERGE CIS(IN=A) INDVX(IN=B); BY CUSTNOX;
+      IF A;
+      RUNTIMESTAMP="&YEAR"||"&MONTH"||"&DAY"||"&TIMEX";
+      RESTR = RESIDENCY;
+      SALES = CORPSTATUS;
+      CITZN = CITIZENSHIP;
+ RUN;
+PROC SORT  DATA=MRGCIS; BY RESTR;RUN;
+PROC PRINT DATA=MRGCIS(OBS=5);TITLE 'MRGCIS';RUN;
+
+DATA MRGRES;
+     MERGE MRGCIS(IN=C) RESTR(IN=D);BY RESTR;
+     IF C;
+ RUN;
+PROC SORT  DATA=MRGRES; BY SALES; RUN;
+PROC PRINT DATA=MRGRES(OBS=5);TITLE 'MRGRES';RUN;
+
+DATA MRGSAL;
+     MERGE MRGRES(IN=E) SALES(IN=F);BY SALES;
+     IF E;
+ RUN;
+PROC SORT  DATA=MRGSAL; BY CITZN;RUN;
+PROC PRINT DATA=MRGSAL(OBS=5);TITLE 'MRGSAL';RUN;
+
+DATA MRGCTZ;
+     MERGE MRGSAL(IN=G) CITZN(IN=H);BY CITZN;
+     IF G;
+ RUN;
+PROC SORT  DATA=MRGCTZ; BY CUSTNOX; RUN;
+PROC PRINT DATA=MRGCTZ(OBS=5);TITLE 'MRGCTZ';RUN;
+
+DATA OUT2;
+  SET MRGCTZ;
+  FILE OUTFILE;
+     PUT @01   RUNTIMESTAMP           $20.
+         @21   CUSTNOX                $20.
+         @41   ADDREFX                $11./*  PD6.*/
+         @52   CUSTNAME               $40.
+         @92   PRIPHONEX              $11./*PD6.*/
+         @103  SECPHONEX              $11./*PD6.*/
+         @114  MOBILEPHX              $11./*PD6.*/
+         @125  FAXX                   $11./*PD6.*/
+         @136  ALIASKEY               $3.
+         @139  ALIAS                  $20.
+         @159  PROCESSTIME            $8.
+         @167  CUSTSTAT               $1.
+         @168  TAXCODE                $1.
+         @169  TAXID                  $9.
+         @178  CUSTBRCH               $5.
+         @183  COSTCTR                $5. /*PD4.*/
+         @188  CUSTMNTDATE            $08.
+         @196  CUSTLASTOPER           $8.
+         @204  PRIM_OFF               $5./*PD3.*/
+         @209  SEC_OFF                $5./*PD3.*/
+         @214  PRIM_LN_OFF            $5./*PD3.*/
+         @219  SEC_LN_OFF             $5./*PD3.*/
+         @224  RACE                   $1.
+         @225  RESIDENCY              $3.
+         @228  CITIZENSHIP            $2.
+         @230  OPENDT                 $08. /*  PD6.*/
+         @241  HRCALL                 $60.
+         @301  EXPERIENCE             $3.
+         @304  HOBBIES                $3.
+         @307  RELIGION               $3.
+         @310  LANGUAGE               $3.
+         @313  INST_SEC               $3.
+         @316  CUST_CODE              $3.
+         @319  CUSTCONSENT            $3.
+         @322  BASICGRPCODE           $3.
+         @327  MSICCODE               $5.
+         @332  MASCO2008              $5.
+         @337  INCOME                 $3.
+         @340  EDUCATION              $3.
+         @343  OCCUP                  $3.
+         @346  MARITALSTAT            $1.
+         @347  OWNRENT                $1.
+         @348  EMPNAME                $40.
+         @388  DOBDOR                 $08.
+         @396  SICCODE                $05.
+         @401  CORPSTATUS             $3.
+         @404  NETWORTH               $3.
+         @407  LAST_UPDATE_DATE       $10.
+         @417  LAST_UPDATE_TIME       $10.
+         @427  LAST_UPDATE_OPER       $10.
+         @437  PRCOUNTRY              $02.
+         @439  EMPLOYMENT_TYPE        $10.
+         @449  EMPLOYMENT_SECTOR      $10.
+         @459  EMPLOYMENT_LAST_UPDATE $10.
+         @469  BNMID                  $20.
+         @489  LONGNAME               $150.
+         @639  INDORG                 $1.
+         @640  RESDESC                $20.
+         @660  SALDESC                $20.
+         @680  CTZDESC                $20.;
+

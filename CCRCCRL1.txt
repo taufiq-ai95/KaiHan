@@ -1,0 +1,186 @@
+//CCRCCRL1 JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=64M,NOTIFY=&SYSUID      JOB49056
+//*---------------------------------------------------------------------
+//*- ESMR 2011-2834 DISPLAY OF CUST-TO-CUST RELATIONSHIP IN CAS-IMIS
+//*- APPEND DP/LN ACCOUNT    TO CC(INDV-ORG) AND CC(ORG-ORG) ONLY
+//*- TO SHOW PERSONAL ACCOUNT ONLY. JOINT ACCOUNT DROP
+//*- APPEND ORIGINAL RECORD  TO CC(ORG-INDV) AND CC(INDV-INDV)
+//*- ESMR 2014-764  CHANGE FILE FORMAT FROM FIXED LENGTH TO DELIMITED
+//*---------------------------------------------------------------------
+//DELETE   EXEC PGM=IEFBR14
+//DEL0     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.RLNIND,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//DEL1     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.RLNORG,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//DEL2     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.PARTIES,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//DEL3     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.PARTIES.IMIS,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//*--------------------------------------------------------------------
+//* SORT FILE TO "KEEP LEFT SIDE" ORGANISATION RELATED PARTY
+//*--------------------------------------------------------------------
+//ORGONLY  EXEC PGM=SORT                                                00170000
+//SYSOUT   DD SYSOUT=*                                                  00170000
+//SORTWK01 DD UNIT=SYSDA,SPACE=(CYL,(500,250))                          00170000
+//SORTWK02 DD UNIT=SYSDA,SPACE=(CYL,(500,250))                          00170000
+//SORTWK03 DD UNIT=SYSDA,SPACE=(CYL,(500,250))                          00170000
+//SORTIN   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CC.RLNSHIP.SRCH
+//ORGCC    DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.RLNORG,                    00170000
+//            DISP=(NEW,CATLG,DELETE),UNIT=SYSDA,
+//            DCB=(LRECL=300,BLKSIZE=0,RECFM=FB),
+//            SPACE=(CYL,(500,300),RLSE)
+//INDCC    DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.RLNIND,                    00170000
+//            DISP=(NEW,CATLG,DELETE),UNIT=SYSDA,
+//            DCB=(LRECL=300,BLKSIZE=0,RECFM=FB),
+//            SPACE=(CYL,(500,300),RLSE)
+//SYSIN  DD *
+ SORT FIELDS=COPY
+ OUTFIL INCLUDE=(55,1,CH,EQ,C'O'),FNAMES=ORGCC
+ OUTFIL INCLUDE=(55,1,CH,EQ,C'I'),FNAMES=INDCC
+//*-------------------------------------------------------------------
+//* TAKE ORGANISATION RELATIONSHIP & MERGE WITH PERSONAL ACCOUNTS ONLY
+//*-------------------------------------------------------------------
+//MOVEDATA EXEC SAS609
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(500,300))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(500,300))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(500,300))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(500,300))
+//RLENORG   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CC.RLNSHIP.RLNORG
+//RLENIND   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CC.RLNSHIP.RLNIND
+//PRIMREC   DD DISP=SHR,DSN=RBP2.B033.UNLOAD.RLEN#CA.NONJOINT
+//OUTFILE   DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.PARTIES,
+//             DISP=(NEW,CATLG,DELETE),
+//             UNIT=SYSDA,SPACE=(CYL,(500,300),RLSE),
+//             DCB=(LRECL=300,BLKSIZE=0,RECFM=FB)
+//IMISFILE  DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.PARTIES.IMIS,
+//             DISP=(NEW,CATLG,DELETE),
+//             UNIT=SYSDA,SPACE=(CYL,(500,300),RLSE),
+//             DCB=(LRECL=300,BLKSIZE=0,RECFM=FB)
+//SASLIST   DD SYSOUT=X
+//SYSIN     DD *
+ /*----------------------------------------------------------------*/
+ /*    PERSONAL ACCOUNT FILE (NO JOINT ACCOUNT)                    */
+ /*----------------------------------------------------------------*/
+   DATA PRIMARY;
+   INFILE PRIMREC;
+     INPUT @05   ACCTNO     $20.
+           @25   ACCTCODE   $5.
+           @46   CUSTNO     $11. ;
+     /*    @66   RLENCODE   PD2.    */
+     /*    @68   PRISEC     PD2.;   */
+   RUN;
+   PROC SORT  DATA=PRIMARY ;BY CUSTNO;RUN;
+   PROC PRINT DATA=PRIMARY (OBS=50);TITLE 'CA RELATIONSHIP';RUN;
+
+ /*----------------------------------------------------------------*/
+ /*    CUSTOMER-TO-CUSTOMER RELATIONSHIP FILE  (INDIVIDUAL)        */
+ /*----------------------------------------------------------------*/
+   DATA CCRLEN1;
+   INFILE RLENIND;
+     INPUT @01   CUSTNO1    $11.            /* INDIVIDUAL  */
+           @15   CUSTTYPE1  $1.
+           @20   RLENCODE1  $3.
+           @25   DESC1      $15.
+           @40   CUSTNO     $11.
+           @55   CUSTTYPE   $1.
+           @60   RLENCODE   $3.
+           @65   DESC       $15.
+           @95   CUSTNAME1  $40.
+           @135  ALIAS1     $20.
+           @155  CUSTNAME   $40.
+           @195  ALIAS      $20.;
+   RUN;
+   PROC SORT  DATA=CCRLEN1 ;BY CUSTNO;RUN;
+   PROC PRINT DATA=CCRLEN1 (OBS=50);TITLE 'CC INDIVIDUAL';RUN;
+
+ /*----------------------------------------------------------------*/
+ /*    CUSTOMER-TO-CUSTOMER RELATIONSHIP FILE  (ORGANISATION)      */
+ /*----------------------------------------------------------------*/
+   DATA CCRLEN;
+   INFILE RLENORG;
+     INPUT @01   CUSTNO1            $11.     /* ORGANISATION */
+           @15   CUSTTYPE1          $1.
+           @20   RLENCODE1          $3.
+           @25   DESC1              $15.
+           @40   CUSTNO             $11.
+           @55   CUSTTYPE           $1.
+           @60   RLENCODE           $3.
+           @65   DESC               $15.
+           @95   CUSTNAME1          $40.
+           @135  ALIAS1             $20.
+           @155  CUSTNAME           $40.
+           @195  ALIAS              $20.;
+   RUN;
+   PROC SORT  DATA=CCRLEN  ;BY CUSTNO;RUN;
+   PROC PRINT DATA=CCRLEN  (OBS=50);TITLE 'CC RELATIONSHIP';RUN;
+
+    PROC SQL;
+    CREATE TABLE CC_PRIMARY AS
+      SELECT CCRLEN.CUSTNO1
+            ,CCRLEN.CUSTTYPE1
+            ,CCRLEN.RLENCODE1
+            ,CCRLEN.DESC1
+            ,CCRLEN.CUSTNO
+            ,CCRLEN.CUSTTYPE
+            ,CCRLEN.RLENCODE
+            ,CCRLEN.DESC
+            ,CCRLEN.CUSTNAME1
+            ,CCRLEN.ALIAS1
+            ,CCRLEN.CUSTNAME
+            ,CCRLEN.ALIAS
+            ,PRIMARY.ACCTNO
+            ,PRIMARY.ACCTCODE
+       /*   ,PRIMARY.CUSTNO */
+        FROM CCRLEN,PRIMARY
+        WHERE CCRLEN.CUSTNO = PRIMARY.CUSTNO;
+    QUIT;
+
+    PROC SORT  DATA=CC_PRIMARY ;BY CUSTNO ACCTCODE ACCTNO;RUN;
+    PROC PRINT DATA=CC_PRIMARY(OBS=20);TITLE 'CCRLEN + PRIM';RUN;
+
+ /*----------------------------------------------------------------*/
+ /*    CUSTOMER-TO-CUSTOMER RELATIONSHIP FILE                      */
+ /*----------------------------------------------------------------*/
+DATA OUT;
+  SET CC_PRIMARY CCRLEN1;
+  FILE OUTFILE;
+     PUT @01   CUSTNO1            $11.
+         @15   CUSTTYPE1          $1.
+         @20   RLENCODE1          $3.
+         @25   DESC1              $15.
+         @40   CUSTNO             $11.
+         @55   CUSTTYPE           $1.
+         @60   RLENCODE           $3.
+         @65   DESC               $15.
+         @80   ACCTCODE           $5.
+         @85   ACCTNO             $20.
+         @105  CUSTNAME1          $40.
+         @145  ALIAS1             $20.
+         @165  CUSTNAME           $40.
+         @205  ALIAS              $20.;
+  RETURN;
+  RUN;
+
+ /*----------------------------------------------------------------*/
+ /*    CUSTOMER-TO-CUSTOMER RELATIONSHIP FILE  (FOR IMIS)          */
+ /*----------------------------------------------------------------*/
+DATA OUT;
+  SET CC_PRIMARY CCRLEN1;
+  FILE IMISFILE;
+     PUT @1    '"'
+         @2    CUSTNO1        $11. @12    '","'
+         @15   CUSTTYPE1      $1.  @16    '","'
+         @19   RLENCODE1      $3.  @22    '","'
+         @25   DESC1          $15. @40    '","'
+         @43   CUSTNO         $11. @54    '","'
+         @57   CUSTTYPE       $1.  @58    '","'
+         @61   RLENCODE       $3.  @64    '","'
+         @67   DESC           $15. @82    '","'
+         @85   ACCTCODE       $5.  @90    '","'
+         @93   ACCTNO         $20. @113   '","'
+         @116  CUSTNAME1      $40. @156   '","'
+         @159  ALIAS1         $20. @179   '","'
+         @182  CUSTNAME       $40. @222   '","'
+         @225  ALIAS          $20. @245   '", \N';
+  RETURN;
+  RUN;
+

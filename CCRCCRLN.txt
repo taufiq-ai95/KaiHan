@@ -1,0 +1,428 @@
+//CCRCCRLN JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=256M,NOTIFY=&SYSUID     JOB54833
+//*---------------------------------------------------------------------
+//*-EJS A2014-00021883  (CRMS PROJECT)
+//* INCLUDE ADDITIONAL COLUMNS TO BE PLACED INTO CIS INTERFACE FILES
+//* 2016-4519 INCLUDE EFFECTIVE DATE INTO FILE
+//*---------------------------------------------------------------------
+//* ESMR 2021-00002352
+//* TO EXCLUDE RECORD WITH EXPIRED DATE IN RLEN CC FILE
+//*---------------------------------------------------------------------
+//DELETE   EXEC PGM=IEFBR14
+//DEL1     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//DEL2     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.SRCH,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//DEL3     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.DUP,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//*---------------------------------------------------------------------
+//*-- PROCESSING LEFT  SIDE
+//*---------------------------------------------------------------------
+//RLEN#C1  EXEC SAS609,OPTIONS='VERBOSE SORTLIST SORTMSG MSGLEVEL=I'
+//IEFRDER   DD DUMMY
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK05  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK06  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK07  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK08  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK09  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK10  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//INFILE1   DD DISP=SHR,DSN=RBP2.B033.UNLOAD.RLEN#CC.FB
+//CCCODE    DD DISP=SHR,DSN=RBP2.B033.BANKCTRL.RLENCODE.CC
+//NAMEFILE  DD DISP=SHR,DSN=RBP2.B033.UNLOAD.PRIMNAME.OUT
+//ALIASFIL  DD DISP=SHR,DSN=RBP2.B033.UNLOAD.ALLALIAS.OUT
+//CUSTFILE  DD DISP=SHR,DSN=RBP2.B033.UNLOAD.ALLCUST.FB
+//OUTFILE   DD DISP=(NEW,PASS),DSN=&&RLENFILE,
+//             DCB=(LRECL=300,BLKSIZE=0,RECFM=FB),
+//             UNIT=SYSDA,SPACE=(CYL,(20,10),RLSE)
+//SASLIST   DD SYSOUT=X
+//SYSIN     DD *
+OPTIONS NOSORTBLKMODE;
+ /*----------------------------------------------------------------*/
+ /*    DATA DECLARATION                                            */
+ /*----------------------------------------------------------------*/
+ DATA CCCODES;
+    INFILE CCCODE;
+    INPUT @05   TYPE              $2.
+          @10   CODE1              3.
+          @40   DESC1             $15.;
+    RUN;
+ PROC SORT DATA=CCCODES NODUPKEY;BY CODE1 ;RUN;
+ PROC PRINT DATA=CCCODES (OBS=5);TITLE 'RELATION FILE';RUN;
+
+DATA CISCUST; /* LEFT SIDE */
+    INFILE CUSTFILE;
+    INPUT @05   CUSTNO            $11.
+          @36   OLDIC1            $9.
+          @242  BASICGRPCODE1     $3.;
+   RUN;
+PROC SORT DATA=CISCUST NODUPKEY;BY CUSTNO;RUN;
+
+DATA CISNAME;
+    INFILE NAMEFILE;
+    INPUT @05   CUSTNO            $11.
+          @52   INDORG1           $1.
+          @89   CUSTNAME1         $40.;
+   RUN;
+PROC SORT DATA=CISNAME NODUPKEY;BY CUSTNO;RUN;
+
+DATA CISALIAS;
+    INFILE ALIASFIL;
+    INPUT @05   CUSTNO            $11.
+          @89   ALIAS1            $20.;
+   RUN;
+PROC SORT DATA=CISALIAS;BY CUSTNO;RUN;
+
+ DATA CCRLEN1;
+    INFILE INFILE1;
+    INPUT @05   CUSTNO            $11.
+          @32   EFFDATE           PD5.
+          @46   CUST2             $11.
+          @66   CODE1             PD2.
+          @68   CODE2             PD2.
+          @81   EXPDATE1          $10.              /*212352*/
+          @81   EXPDATE      YYMMDD10.;
+
+          IF EXPDATE1  NE '    '    THEN DELETE;    /*212352*/
+
+    RUN;
+ PROC SORT  DATA=CCRLEN1 ;BY CODE1 ;RUN;
+ PROC PRINT DATA=CCRLEN1 (OBS=5);TITLE 'RLEN FILE';RUN;
+ /*----------------------------------------------------------------*/
+ /*    LOOKUP CONTROL FILES FOR DESCRIPTIONS                       */
+ /*----------------------------------------------------------------*/
+ DATA IDX_L01;          /* RELATIONSHIP CODES */
+      MERGE CCRLEN1(IN=A) CCCODES(IN=B);BY CODE1;
+      IF A;
+ RUN;
+ PROC SORT DATA=IDX_L01;BY CUSTNO;RUN;
+
+ DATA IDX_L02;          /* CIS INDORG + NAME */
+      MERGE IDX_L01(IN=C) CISNAME(IN=D);BY CUSTNO;
+      IF C;
+ RUN;
+
+ DATA IDX_L03;          /* CIS ALIAS */
+      MERGE IDX_L02(IN=E) CISALIAS(IN=F);BY CUSTNO;
+      IF E;
+ RUN;
+ PROC PRINT DATA=IDX_L03(OBS=5);TITLE 'RESULT3';RUN;
+
+ DATA IDX_L04;          /* CIS CUST  */
+      MERGE IDX_L03(IN=G) CISCUST(IN=H);BY CUSTNO;
+      IF G;
+ RUN;
+ PROC PRINT DATA=IDX_L04(OBS=5);TITLE 'RESULT4';RUN;
+
+ /*----------------------------------------------------------------*/
+ /*   OUTPUT DETAIL REPORT (LEFT SIDE)                             */
+ /*----------------------------------------------------------------*/
+DATA LEFTOUT;
+  SET IDX_L04;
+  FILE OUTFILE;
+     PUT @01   CUSTNO            $11.
+         @13   INDORG1            $1.
+         @15   CODE1              Z3.
+         @20   DESC1             $15.
+         @50   CUST2             $11.
+         @65   CODE2              Z3.
+         @85   EXPDATE       DDMMYYN8.
+         @95   CUSTNAME1         $40.
+         @135  ALIAS1            $20.
+         @155  OLDIC1            $9.
+         @165  BASICGRPCODE1     $3.
+         @169  EFFDATE           Z8.;
+
+  RETURN;
+  RUN;
+//*---------------------------------------------------------------------
+//*-- PROCESSING RIGHT SIDE
+//*---------------------------------------------------------------------
+//RLEN#C2  EXEC SAS609,OPTIONS='VERBOSE SORTLIST SORTMSG MSGLEVEL=I'
+//IEFRDER   DD DUMMY
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK05  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK06  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK07  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK08  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK09  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK10  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//INFILE2   DD DISP=(OLD,DELETE),DSN=&&RLENFILE
+//CCCODE    DD DISP=SHR,DSN=RBP2.B033.BANKCTRL.RLENCODE.CC
+//CUSTFILE  DD DISP=SHR,DSN=RBP2.B033.UNLOAD.ALLCUST.FB
+//NAMEFILE  DD DISP=SHR,DSN=RBP2.B033.UNLOAD.PRIMNAME.OUT
+//ALIASFIL  DD DISP=SHR,DSN=RBP2.B033.UNLOAD.ALLALIAS.OUT
+//OUTFILE   DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP,
+//             DISP=(NEW,CATLG,DELETE),
+//             UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//             DCB=(LRECL=300,BLKSIZE=0,RECFM=FB)
+//SASLIST   DD SYSOUT=X
+//SYSIN     DD *
+OPTIONS NOSORTBLKMODE;
+ /*----------------------------------------------------------------*/
+ /*    DATA DECLARATION                                            */
+ /*----------------------------------------------------------------*/
+ DATA CCCODES;
+    INFILE CCCODE;
+    INPUT @05   TYPE              $2.
+          @10   CODE2              3.
+          @40   DESC2             $15.;
+    RUN;
+ PROC SORT DATA=CCCODES ;BY CODE2;RUN;
+ PROC PRINT DATA=CCCODES (OBS=5);TITLE 'RELATION FILE';RUN;
+
+DATA CISCUST; /* RIGHT SIDE */
+    INFILE CUSTFILE;
+    INPUT @05   CUSTNO            $11.
+          @36   OLDIC2            $9.
+          @242  BASICGRPCODE2     $3.;
+   RUN;
+PROC SORT DATA=CISCUST NODUPKEY;BY CUSTNO;RUN;
+
+DATA CISNAME; /* NAME FILE */
+    INFILE NAMEFILE;
+    INPUT @05   CUSTNO            $11.
+          @52   INDORG2           $1.
+          @89   CUSTNAME2         $40.;
+   RUN;
+PROC SORT DATA=CISNAME NODUPKEY;BY CUSTNO;RUN;
+
+DATA CISALIAS; /* ALIAS FILE  */
+    INFILE ALIASFIL;
+    INPUT @05   CUSTNO            $11.
+          @89   ALIAS2            $20.;
+   RUN;
+PROC SORT DATA=CISALIAS;BY CUSTNO;RUN;
+
+ DATA CCRLEN2;
+    INFILE INFILE2;
+    INPUT @01   CUSTNO1           $11.
+          @13   INDORG1            $1.
+          @15   CODE1               3.
+          @20   DESC1             $15.
+          @50   CUSTNO            $11.
+          @65   CODE2               3.
+          @85   EXPDD               2.
+          @87   EXPMM               2.
+          @89   EXPYY               4.
+          @95   CUSTNAME1         $40.
+          @135  ALIAS1            $20.
+          @155  OLDIC1            $9.
+          @165  BASICGRPCODE1     $3.
+          @169  EFFDATE           8.;
+          EXPDATE=MDY(EXPMM,EXPDD,EXPYY);
+    RUN;
+ PROC SORT DATA=CCRLEN2;BY CODE2;RUN;
+ PROC PRINT DATA=CCRLEN2 (OBS=5);TITLE 'RLEN FILE';RUN;
+ /*----------------------------------------------------------------*/
+ /*    MERGE  CONTROL FILES FOR DESCRIPTIONS                       */
+ /*----------------------------------------------------------------*/
+ DATA IDX_R01;          /* RELATIONSHIP CODES */
+      MERGE CCRLEN2(IN=J) CCCODES(IN=K);BY CODE2;
+      IF J;
+ RUN;
+ PROC SORT DATA=IDX_R01 OUT=TMP1;BY CUSTNO;RUN;
+
+ DATA IDX_R02;          /* CIS INDORG + NAME */
+      MERGE TMP1(IN=M) CISNAME(IN=N);BY CUSTNO;
+      IF M;
+ RUN;
+
+ DATA IDX_R03;          /* CIS ALIAS */
+      MERGE IDX_R02(IN=P) CISALIAS(IN=Q);BY CUSTNO;
+      IF P;
+ RUN;
+
+ DATA IDX_R04;          /* CIS CUST */
+      MERGE IDX_R03(IN=R) CISCUST(IN=S);BY CUSTNO;
+      IF R;
+ RUN;
+
+ PROC PRINT DATA=IDX_R04 (OBS=5);TITLE 'RESULT';RUN;
+ /*----------------------------------------------------------------*/
+ /*   OUTPUT DETAIL REPORT                                         */
+ /*----------------------------------------------------------------*/
+DATA RIGHTOUT;
+  SET IDX_R04;
+  FILE OUTFILE;
+     PUT @01   CUSTNO1           $11.
+         @15   INDORG1            $1.
+         @20   CODE1              Z3.
+         @25   DESC1             $15.
+         @40   CUSTNO            $11.
+         @55   INDORG2            $1.
+         @60   CODE2              Z3.
+         @65   DESC2             $15.
+         @80   EXPDATE       YYMMDDN8.
+         @95   CUSTNAME1         $40.
+         @135  ALIAS1            $20.
+         @155  CUSTNAME2         $40.
+         @195  ALIAS2            $20.
+         @215  OLDIC1            $9.
+         @225  BASICGRPCODE1     $3.
+         @228  OLDIC2            $9.
+         @238  BASICGRPCODE2     $3.
+         @242  EFFDATE           Z8.;
+
+  RETURN;
+  RUN;
+//*---------------------------------------------------------------------
+//*-- FILE TO SEARCH ONE SIDE ONLY
+//*---------------------------------------------------------------------
+//RLEN#C3  EXEC SAS609,OPTIONS='VERBOSE SORTLIST SORTMSG MSGLEVEL=I'
+//IEFRDER   DD DUMMY
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK05  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK06  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK07  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK08  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK09  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK10  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//INPUTF1   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CC.RLNSHIP
+//INPUTF2   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CC.RLNSHIP
+//CTRLDATE  DD DISP=SHR,DSN=RBP2.B033.SRSCTRL1(0)
+//OUTFILE   DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.ALL,
+//             DISP=(NEW,CATLG,DELETE),
+//             UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//             DCB=(LRECL=300,BLKSIZE=0,RECFM=FB)
+//SASLIST   DD SYSOUT=X
+//SYSIN     DD *
+OPTIONS NOSORTBLKMODE;
+ /*----------------------------------------------------------------*/
+ /*    SET DATES                                                   */
+ /*----------------------------------------------------------------*/
+    DATA SRSDATE;
+          INFILE CTRLDATE;
+            INPUT @001  SRSYY    4.
+                  @005  SRSMM    2.
+                  @007  SRSDD    2.;
+
+          /* DISPLAY TODAY REPORTING DATE*/
+          TODAYSAS=MDY(SRSMM,SRSDD,SRSYY);
+          CALL SYMPUT('DATE1',PUT(TODAYSAS,8.));
+    RUN;
+   PROC PRINT;RUN;
+ /*----------------------------------------------------------------*/
+ /*    DATA DECLARATION                                            */
+ /*----------------------------------------------------------------*/
+ DATA INPUT1;
+    INFILE INPUTF1;
+    INPUT @01   CUSTNO1           $11.
+          @15   INDORG1            $1.
+          @20   CODE1              $3.
+          @25   DESC1             $15.
+          @40   CUSTNO2           $11.
+          @55   INDORG2            $1.
+          @60   CODE2              $3.
+          @65   DESC2             $15.
+          @80   EXPYY               4.
+          @84   EXPMM               2.
+          @86   EXPDD               2.
+          @95   CUSTNAME1          $40.
+          @135  ALIAS1             $20.
+          @155  CUSTNAME2          $40.
+          @195  ALIAS2             $20.
+          @215  OLDIC1             $9.
+          @225  BASICGRPCODE1      $3.
+          @228  OLDIC2             $9.
+          @238  BASICGRPCODE2      $3.
+          @242  EFFDATE            8.;
+
+          EXPDATE=MDY(EXPMM,EXPDD,EXPYY);
+          /* DELETE EXPIRED RELATIONSHIPS */
+          IF EXPDATE NOT =. AND EXPDATE<&DATE1 THEN DELETE;
+    RUN;
+ PROC PRINT DATA=INPUT1 (OBS=5);TITLE 'INPUT1 FILE';RUN;
+
+ DATA INPUT2;
+    INFILE INPUTF2;
+    INPUT @01   CUSTNO2           $11.
+          @15   INDORG2            $1.
+          @20   CODE2              $3.
+          @25   DESC2             $15.
+          @40   CUSTNO1           $11.
+          @55   INDORG1            $1.
+          @60   CODE1              $3.
+          @65   DESC1             $15.
+          @80   EXPYY               4.
+          @84   EXPMM               2.
+          @86   EXPDD               2.
+          @95   CUSTNAME2          $40.
+          @135  ALIAS2             $20.
+          @155  CUSTNAME1          $40.
+          @195  ALIAS1             $20.
+          @215  OLDIC2             $9.
+          @225  BASICGRPCODE2      $3.
+          @228  OLDIC1             $9.
+          @238  BASICGRPCODE1      $3.
+          @242  EFFDATE            8.;
+          EXPDATE=MDY(EXPMM,EXPDD,EXPYY);
+          /* DELETE EXPIRED RELATIONSHIPS */
+          IF EXPDATE NOT =. AND EXPDATE<&DATE1 THEN DELETE;
+    RUN;
+ PROC PRINT DATA=INPUT2 (OBS=5);TITLE 'INPUT2 FILE';RUN;
+
+DATA TEMPOUT;
+  SET INPUT1 INPUT2;
+  FILE OUTFILE;
+     PUT @01   CUSTNO1           $11.      /* CUST1 - CIS#          */
+         @15   INDORG1            $1.      /* CUST1 - CUST TYPE     */
+         @20   CODE1              $3.      /* CUST1 - RLEN CODE     */
+         @25   DESC1             $15.      /* CUST1 - RLEN DESC     */
+         @40   CUSTNO2           $11.      /* CUST2 - CIS#          */
+         @55   INDORG2            $1.      /* CUST2 - CUST TYPE     */
+         @60   CODE2              $3.      /* CUST2 - RLEN CODE     */
+         @65   DESC2             $15.      /* CUST2 - RLEN DESC     */
+         @80   EXPDATE          YYMMDD10.
+         @95   CUSTNAME1          $40.     /* CUST1 - CUST NAME     */
+         @135  ALIAS1             $20.     /* CUST1 - ID            */
+         @155  CUSTNAME2          $40.     /* CUST2 - CUST NAME     */
+         @195  ALIAS2             $20.     /* CUST2 - ID            */
+         @215  OLDIC1             $9.      /* CUST1 - OLDIC         */
+         @225  BASICGRPCODE1      $3.      /* CUST1 - BGC CODE      */
+         @228  OLDIC2             $9.      /* CUST2 - OLDIC         */
+         @238  BASICGRPCODE2      $3.      /* CUST2 - BGC CODE      */
+         @242  EFFDATE            Z8.;
+  RETURN;
+  RUN;
+//*---------------------------------------------------------------------
+//*- STEP 4 - REMOVING DUPLICATE RECORDS , SEARCH ONE SIDE ONLY
+//*---------------------------------------------------------------------
+//UNQREC   EXEC PGM=ICETOOL
+//TOOLMSG  DD SYSOUT=*
+//DFSMSG   DD SYSOUT=*
+//INDD01   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CC.RLNSHIP.ALL
+//OUTDD01  DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.SRCH,
+//            DISP=(NEW,CATLG,DELETE),
+//            UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//            DCB=(LRECL=300,BLKSIZE=0,RECFM=FB)
+//TOOLIN   DD *
+   SELECT FROM(INDD01) TO(OUTDD01) ON(1,150,CH) FIRST
+//*---------------------------------------------------------------------
+//*- STEP 5 - GET ALL DUPLICATE RECORDS (FOR REF ONLY. DO NOT USE DB2)
+//*---------------------------------------------------------------------
+//DUPREC   EXEC PGM=ICETOOL
+//TOOLMSG  DD SYSOUT=*
+//DFSMSG   DD SYSOUT=*
+//INDD01   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CC.RLNSHIP.ALL
+//OUTDD01  DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.DUP,
+//            DISP=(NEW,CATLG,DELETE),
+//            UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//            DCB=(LRECL=300,BLKSIZE=0,RECFM=FB)
+//TOOLIN   DD *
+   SELECT FROM(INDD01) TO(OUTDD01) ON(1,150,CH) ALLDUPS
+//*---------------------------------------------------------------------
+//*--  DELETE TEMPORARY FILE
+//*---------------------------------------------------------------------
+//INITTEMP EXEC PGM=IEFBR14
+//DEL4     DD DSN=RBP2.B033.CCRIS.CC.RLNSHIP.ALL,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+
