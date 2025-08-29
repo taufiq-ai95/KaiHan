@@ -1,0 +1,253 @@
+//CCRNIDIC JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=128M,NOTIFY=&SYSUID     JOB25741
+//*--------------------------------------------------------------------
+//*TO MERGE ACCOUNT, NAME AND ALIAS INTO ONE DAILY FILE. INCL:UNICARD
+//* ESMR 2019-1394 TO EXTRACT DATA FROM IDIC FOR REPORTING PURPOSES
+//* ESMR 2018-512
+//* ESMR 2018-911
+//* ESMR 2018-1851
+//*--------------------------------------------------------------------
+//**INITIALIZE DATASETS
+//*--------------------------------------------------------------------
+//INITDASD EXEC PGM=IEFBR14
+//DEL1     DD DSN=RBP2.B033.CIS.IDIC.DAILY.INDV,
+//            DISP=(MOD,DELETE,DELETE),UNIT=SYSDA,SPACE=(TRK,(0))
+//DEL2     DD DSN=RBP2.B033.CIS.IDIC.DAILY.ORG,
+//            DISP=(MOD,DELETE,DELETE),UNIT=SYSDA,SPACE=(TRK,(0))
+//*--------------------------------------------------------------------
+//INDIVIDU  EXEC SAS609
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK05  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK06  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK07  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK08  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK09  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK10  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//MAINFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.CIDICUST.FB
+//INDVFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.CIDINDVT.FB
+//CARTFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.CIDICART.FB
+//SASFILE  DD DSN=RBP2.B033.CIS.IDIC.DAILY.INDV,
+//            DISP=(NEW,CATLG,DELETE),
+//            DCB=(RECFM=FS,LRECL=27648,BLKSIZE=27648),
+//            SPACE=(CYL,(300,300),RLSE),UNIT=SYSDA
+//SASLIST  DD SYSOUT=X
+//SYSIN    DD *
+DATA MAIN;
+  INFILE MAINFILE;
+  INPUT  @001  CUSTNO             $20.
+         @021  BANKNO             PD2.
+         @023  MAIN_ENTITY_TYPE   $10.
+         @033  BRANCH             $10.
+         @043  CUSTNAME          $150.
+         @193  BIRTHDATE          $10.
+         @203  GENDER              $1. ;
+  IF GENDER = 'O' THEN DELETE;
+  RUN;
+PROC SORT  DATA=MAIN; BY CUSTNO;RUN;
+PROC PRINT DATA=MAIN(OBS=5);TITLE 'MAIN CUSTOMER FILE';RUN;
+
+DATA INDV;
+  INFILE INDVFILE;
+  INPUT  @001    CUSTNO                       $20.
+         @021    IDTYPE                        $3.
+         @024    ID                           $20.
+     /*  @044    BANKNO                       PD2. */
+         @046    CUSTBRANCH                   $10.
+         @056    FIRST_CREATE_DATE            $10.
+         @066    FIRST_CREATE_TIME             $8.
+         @074    FIRST_CREATE_OPER            $20.
+         @094    LAST_UPDATE_DATE             $10.
+         @104    LAST_UPDATE_TIME              $8.
+         @112    LAST_UPDATE_OPER             $20.
+         @132    LONGNAME                    $150.
+         @282    ENTITYTYPE                   $10.
+         @292    BNM_ASSIGNED_ID              $25.
+         @317    OLDIC                        $20.
+         @337    CITIZENSHIP                   $2.
+         @339    PRCOUNTRY                     $2.
+         @341    RESIDENCY_STATUS              $5.
+         @346    CUSTOMER_CODE                 $5.
+         @351    ADDRLINE1                    $60.
+         @411    ADDRLINE2                    $60.
+         @471    ADDRLINE3                    $60.
+         @531    ADDRLINE4                    $60.
+         @591    ADDRLINE5                    $60.
+         @651    POSTCODE                     $10.
+         @661    TOWN_CITY                    $50.
+         @711    STATE_CODE                   $10.
+         @721    COUNTRY                       $2.
+         @723    ADDR_LAST_UPDATE             $10.
+         @733    ADDR_LAST_UPTIME              $8.
+         @741    PHONE_HOME                   PD8.
+         @749    PHONE_BUSINESS               PD8.
+         @757    PHONE_FAX                    PD8.
+         @765    PHONE_MOBILE                 PD8.
+         @773    PHONE_PAC                    PD8.
+         @781    EMPLOYER_NAME               $150.
+         @931    MASCO2008                    $10.
+         @941    MASCO2012                    $10.
+         @951    EMPLOYMENT_TYPE              $10.
+         @961    EMPLOYMENT_SECTOR            $10.
+         @971    EMPLOYMENT_LAST_UPDATE       $10.
+         @981    EMPLOYMENT_LAST_UPTIME        $8.
+         @989    INCOME_AMT                   $10.
+         @999    ENABLE_TAB                    $1.;
+  RUN;
+PROC SORT  DATA=INDV; BY CUSTNO IDTYPE ID;RUN;
+PROC PRINT DATA=INDV(OBS=5);TITLE 'INDIVIDUAL FILE';RUN;
+
+DATA CART;
+  INFILE CARTFILE;
+  INPUT  @001   APPL_CODE                  $5.
+         @006   APPL_NO                   $20.
+         @026   PRI_SEC                    $1.
+         @027   RELATIONSHIP               $5.
+         @032   CUSTNO                    $20.
+         @052   IDTYPE                     $3.
+         @055   ID                        $20.
+     /*  @075   BANKNO                     $2. */
+         @077   AA_REF_NO                 $20.
+         @097   EFF_DATE                  $10.
+         @107   EFF_TIME                   $8.
+         @115   LAST_MNT_DATE             $10.
+         @125   LAST_MNT_TIME              $8.;
+  RUN;
+PROC SORT  DATA=CART; BY CUSTNO IDTYPE ID;RUN;
+PROC PRINT DATA=CART(OBS=5);TITLE 'CUST TO ACCOUNT INDV';RUN;
+
+DATA CUSTINFO;
+   MERGE INDV(IN=B) CART(IN=C) ; BY CUSTNO IDTYPE ID;
+   IF B;
+RUN;
+PROC SORT  DATA=CUSTINFO; BY CUSTNO IDTYPE ID;RUN;
+
+DATA SASFILE.INDVDLY;
+   MERGE MAIN(IN=M) CUSTINFO(IN=N) ; BY CUSTNO;
+   IF M AND N;
+RUN;
+
+PROC DATASETS LIBRARY=SASFILE;
+  MODIFY INDVDLY;
+    INDEX CREATE CUSTNO IDTYPE ID;
+RUN;
+
+PROC PRINT DATA=SASFILE.INDVDLY(OBS=5);TITLE 'FINAL';RUN;
+
+//*-------------------------------------------------------------------
+//ORGANISA  EXEC SAS609
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK05  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK06  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK07  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK08  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK09  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK10  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//MAINFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.CIDICUST.FB
+//ORGFILE  DD DISP=SHR,DSN=RBP2.B033.UNLOAD.CIDIORGT.FB
+//CARTFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.CIDICART.FB
+//SASFILE  DD DSN=RBP2.B033.CIS.IDIC.DAILY.ORG,
+//            DISP=(NEW,CATLG,DELETE),
+//            DCB=(RECFM=FS,LRECL=27648,BLKSIZE=27648),
+//            SPACE=(CYL,(300,300),RLSE),UNIT=SYSDA
+//SASLIST  DD SYSOUT=X
+//SYSIN    DD *
+DATA MAIN;
+  INFILE MAINFILE;
+  INPUT  @001  CUSTNO             $20.
+         @021  BANKNO             PD2.
+         @023  MAIN_ENTITY_TYPE   $10.
+         @033  BRANCH             $10.
+         @043  CUSTNAME          $150.
+         @193  BIRTHDATE          $10.
+         @203  GENDER              $1. ;
+  IF GENDER = 'O';
+  RUN;
+PROC SORT  DATA=MAIN; BY CUSTNO;RUN;
+PROC PRINT DATA=MAIN(OBS=5);TITLE 'MAIN CUSTOMER FILE';RUN;
+
+DATA ORG;
+  INFILE ORGFILE;
+  INPUT  @001    CUSTNO                       $20.
+         @021    IDTYPE                        $3.
+         @024    ID                           $20.
+    /*   @044    BANKNO                       PD2. */
+         @046    BRANCH                       $10.
+         @056    FIRST_CREATE_DATE            $10.
+         @066    FIRST_CREATE_TIME             $8.
+         @074    FIRST_CREATE_OPER            $20.
+         @094    LAST_UPDATE_DATE             $10.
+         @104    LAST_UPDATE_TIME              $8.
+         @112    LAST_UPDATE_OPER             $20.
+         @132    LONG_NAME                   $150.
+         @282    ENTITY_TYPE                  $10.
+         @292    BNM_ASSIGNED_ID              $25.
+         @317    REGISTRATION_DATE            $10.
+         @327    MSIC2008                     $10.
+         @337    RESIDENCY_STATUS             $05.
+         @342    CORPORATE_STATUS             $05.
+         @347    CUSTOMER_CODE                $05.
+         @352    CITIZENSHIP                  $02.
+         @354    ADDR_LINE_1                  $60.
+         @414    ADDR_LINE_2                  $60.
+         @474    ADDR_LINE_3                  $60.
+         @534    ADDR_LINE_4                  $60.
+         @594    ADDR_LINE_5                  $60.
+         @654    POSTCODE                     $10.
+         @664    TOWN_CITY                    $50.
+         @714    STATE_CODE                   $10.
+         @724    COUNTRY                       $2.
+         @726    ADDR_LAST_UPDATE             $10.
+         @736    ADDR_LAST_UPTIME              $8.
+         @744    PHONE_PRIMARY                PD8.
+         @752    PHONE_SECONDARY              PD8.
+         @760    PHONE_FAX                    PD8.
+         @768    PHONE_MOBILE                 PD8.
+         @776    PHONE_PAC                    PD8.
+         @784    ENABLE_TAB                    $1.  ;
+  RUN;
+PROC SORT  DATA=ORG ; BY CUSTNO IDTYPE ID;RUN;
+PROC PRINT DATA=ORG (OBS=5);TITLE 'ORGANISATION FILE';RUN;
+
+DATA CART;
+  INFILE CARTFILE;
+  INPUT  @001   APPL_CODE                  $5.
+         @006   APPL_NO                   $20.
+         @026   PRI_SEC                    $1.
+         @027   RELATIONSHIP               $5.
+         @032   CUSTNO                    $20.
+         @052   IDTYPE                     $3.
+         @055   ID                        $20.
+  /*     @075   BANKNO                     $2. */
+         @077   AA_REF_NO                 $20.
+         @097   EFF_DATE                  $10.
+         @107   EFF_TIME                   $8.
+         @115   LAST_MNT_DATE             $10.
+         @125   LAST_MNT_TIME              $8.;
+  RUN;
+PROC SORT  DATA=CART; BY CUSTNO IDTYPE ID;RUN;
+PROC PRINT DATA=CART(OBS=5);TITLE 'CUST TO ACCOUNT INDV';RUN;
+
+DATA CUSTINFO;
+   MERGE ORG(IN=B) CART(IN=C) ; BY CUSTNO IDTYPE ID;
+   IF B;
+RUN;
+PROC SORT  DATA=CUSTINFO; BY CUSTNO IDTYPE ID;RUN;
+
+DATA SASFILE.ORGDLY;
+   MERGE MAIN(IN=M) CUSTINFO(IN=N) ; BY CUSTNO;
+   IF M AND N;
+RUN;
+
+PROC DATASETS LIBRARY=SASFILE;
+  MODIFY ORGDLY;
+    INDEX CREATE CUSTNO IDTYPE ID;
+RUN;
+
+PROC PRINT DATA=SASFILE.ORGDLY(OBS=5);TITLE 'FINAL';RUN;
+
+
