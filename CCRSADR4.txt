@@ -1,0 +1,348 @@
+//CCRSADR4 JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=8M,NOTIFY=&SYSUID       JOB21481
+//* -------------------------------------------------------------------
+//*-  ADDRESS WITH EMPTY TOWN/CITY
+//*-  PICKUP ZIPCODE, CITY FROM ADDRESS LINES AND HARD CODE COUNTRY
+//*   A2016-00026045
+//*   APPLICABLE TO ALL ADDRESSES (INCL NOT THE LATEST ADDRESS)
+//*   A2016-00026431 INCLUDE EMPTY ZIPCODE
+//*--------------------------------------------------------------------
+//INITDASD EXEC PGM=IEFBR14
+//DEL1     DD DSN=RBP2.B033.CCRSADR4.VERIFY,
+//            DISP=(MOD,DELETE,DELETE),UNIT=SYSDA,SPACE=(TRK,(0))
+//DEL2     DD DSN=RBP2.B033.CCRSADR4.UPDATE,
+//            DISP=(MOD,DELETE,DELETE),UNIT=SYSDA,SPACE=(TRK,(0))
+//*--------------------------------------------------------------------
+//STATS#01 EXEC SAS609
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//ADDRFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.ADDRLINE.FB
+//AELEFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.ADDRAELE.FB
+//OUTFILE  DD DSN=RBP2.B033.CCRSADR4.VERIFY,
+//            DISP=(NEW,CATLG,DELETE),
+//            SPACE=(CYL,(300,200),RLSE),UNIT=SYSDA,
+//            DCB=(LRECL=350,BLKSIZE=0,RECFM=FB)
+//UPDFILE  DD DSN=RBP2.B033.CCRSADR4.UPDATE,
+//            DISP=(NEW,CATLG,DELETE),
+//            SPACE=(CYL,(300,200),RLSE),UNIT=SYSDA,
+//            DCB=(LRECL=200,BLKSIZE=0,RECFM=FB)
+//SASLIST  DD SYSOUT=X
+//SYSIN    DD *
+     DATA ADDR;
+        INFILE ADDRFILE;
+        FORMAT ADDREF  11.;
+        INPUT @5     ADDREF1         PD6.
+              @29    LINE1IND         $1.
+              @30    LINE1ADR        $40.
+              @70    LINE2IND         $1.
+              @71    LINE2ADR        $40.
+              @111   LINE3IND         $1.
+              @112   LINE3ADR        $40.
+              @152   LINE4IND         $1.
+              @153   LINE4ADR        $40.
+              @193   LINE5IND         $1.
+              @194   LINE5ADR        $40.;
+              ADDREF=ADDREF1;
+        RUN;
+     PROC SORT  DATA=ADDR;BY ADDREF;RUN;
+     PROC PRINT DATA=ADDR(OBS=5);TITLE 'ADDR';RUN;
+
+     DATA AELE;
+        INFILE AELEFILE;
+        FORMAT ADDREF  11.  STATEX $3.  STATEID $2.;
+        INPUT @5     ADDREF1         PD6.
+              @19    STREET          $15.
+              @47    CITY            $25.
+              @75    ZIP             $05.
+              @80    ZIP2            $04.
+              @84    COUNTRY         $10.;
+              ADDREF=ADDREF1;
+         RUN;
+      PROC SORT  DATA=AELE;BY ADDREF;RUN;
+      PROC PRINT DATA=AELE(OBS=5);TITLE 'AELE';RUN;
+
+  DATA ADDR_AELE;
+      MERGE ADDR(IN=A) AELE(IN=B); BY ADDREF;
+      IF A AND B;
+    ADDRLINE=LINE1ADR||LINE2ADR||LINE3ADR||LINE4ADR||LINE5ADR;
+    IF CITY = '' OR ZIP = '' ;    /* EJS A2016-00026431*/
+    IF COUNTRY IN ('SINGAPORE ','CANADA    ','SINGAPORE`'
+                   ,'LONDON    ','AUS       ','AUSTRIA   '
+                   ,'BAHRAIN   ','BANGLADESH','BRUNEI DAR'
+                   ,'CAMBODIA  ','CAN       ','CAYMAN ISL'
+                   ,'CHINA     ','BRUNEI    ','INDONESIA '
+                   ,'DARUSSALAM','DENMARK   ','EMIRATES  '
+                   ,'ENGLAND   ','EUROPEAN  ','FRANCE    '
+                   ,'GERMANY   ','HONG KONG ','INDIA     '
+                   ,'IRAN (ISLA','IRELAND   ','JAPAN     '
+                   ,'KOREA REPU','MACAU     ','MAURITIUS '
+                   ,'MEXICO    ','MYANMAR   ','NEPAL     '
+                   ,'NETHERLAND','NEW ZEALAN','NEWZEALAND'
+                   ,'NIGERIA   ','NORWAY    ','OMAN      '
+                   ,'PAKISTAN  ','PANAMA    ','PHILIPPINE'
+                   ,'ROC       ','S ARABIA  ','SAMOA     '
+                   ,'SAUDI ARAB','SIGAPORE  ','SIMGAPORE '
+                   ,'SINGAPOREW','SINGPAORE ','SINGPORE  '
+                   ,'SINAGPORE ','SNGAPORE  ','SINGOPORE '
+                   ,'SPAIN     ','SRI LANKA ','SWAZILAND '
+                   ,'SWEDEN    ','SWITZERLAN','TAIWAN    '
+                   ,'TAIWAN,PRO','THAILAND  ','U KINGDOM '
+                   ,'U.K.      ','UNITED ARA','UK        '
+                   ,'UNITED KIN','UNITED STA','VIRGIN ISL'
+                   ,'USA       ','PAPUA NEW ','AUSTRALIA ')
+                   THEN DELETE;
+        /*-------------------*/
+        /* CHECK ADDR LINE 2 */
+        /*-------------------*/
+     IF   '00001' < SUBSTR(LINE2ADR,1,5) < '99998'
+     AND  SUBSTR(LINE2ADR,6,1) EQ ' '
+     AND  SUBSTR(LINE2ADR,1,1) NE ' '
+     AND  SUBSTR(LINE2ADR,2,1) NE ' '
+     AND  SUBSTR(LINE2ADR,3,1) NE ' '
+     AND  SUBSTR(LINE2ADR,4,1) NE ' '
+     AND  SUBSTR(LINE2ADR,5,1) NE ' '
+     AND  SUBSTR(LINE2ADR,1,1) NE ','
+     AND  SUBSTR(LINE2ADR,2,1) NE ','
+     AND  SUBSTR(LINE2ADR,3,1) NE ','
+     AND  SUBSTR(LINE2ADR,4,1) NE ','
+     AND  SUBSTR(LINE2ADR,5,1) NE ','
+     AND  SUBSTR(LINE2ADR,1,1) NE '&'
+     AND  SUBSTR(LINE2ADR,2,1) NE '&'
+     AND  SUBSTR(LINE2ADR,3,1) NE '&'
+     AND  SUBSTR(LINE2ADR,4,1) NE '&'
+     AND  SUBSTR(LINE2ADR,5,1) NE '&'
+     AND  SUBSTR(LINE2ADR,1,1) NE '/'
+     AND  SUBSTR(LINE2ADR,2,1) NE '/'
+     AND  SUBSTR(LINE2ADR,3,1) NE '/'
+     AND  SUBSTR(LINE2ADR,4,1) NE '/'
+     AND  SUBSTR(LINE2ADR,5,1) NE '/'
+     AND  SUBSTR(LINE2ADR,1,1) NE '-'
+     AND  SUBSTR(LINE2ADR,2,1) NE '-'
+     AND  SUBSTR(LINE2ADR,3,1) NE '-'
+     AND  SUBSTR(LINE2ADR,4,1) NE '-'
+     AND  SUBSTR(LINE2ADR,5,1) NE '-'
+     AND  SUBSTR(LINE2ADR,6,1) = ' ' THEN DO;
+          NEW_ZIP     = SUBSTR(LINE2ADR,1,5) ;
+          NEW_CITY    = SUBSTR(LINE2ADR,7,25);
+          NEW_COUNTRY = 'MALAYSIA' ;
+     END;
+             /*-------------------*/
+             /* CHECK ADDR LINE 3 */
+             /*-------------------*/
+     ELSE IF    '00001' < SUBSTR(LINE3ADR,1,5) < '99998'
+          AND  SUBSTR(LINE3ADR,6,1) EQ ' '
+          AND  SUBSTR(LINE3ADR,1,1) NE ' '
+          AND  SUBSTR(LINE3ADR,2,1) NE ' '
+          AND  SUBSTR(LINE3ADR,3,1) NE ' '
+          AND  SUBSTR(LINE3ADR,4,1) NE ' '
+          AND  SUBSTR(LINE3ADR,5,1) NE ' '
+          AND  SUBSTR(LINE3ADR,1,1) NE ','
+          AND  SUBSTR(LINE3ADR,2,1) NE ','
+          AND  SUBSTR(LINE3ADR,3,1) NE ','
+          AND  SUBSTR(LINE3ADR,4,1) NE ','
+          AND  SUBSTR(LINE3ADR,5,1) NE ','
+          AND  SUBSTR(LINE3ADR,1,1) NE '&'
+          AND  SUBSTR(LINE3ADR,2,1) NE '&'
+          AND  SUBSTR(LINE3ADR,3,1) NE '&'
+          AND  SUBSTR(LINE3ADR,4,1) NE '&'
+          AND  SUBSTR(LINE3ADR,5,1) NE '&'
+          AND  SUBSTR(LINE3ADR,1,1) NE '/'
+          AND  SUBSTR(LINE3ADR,2,1) NE '/'
+          AND  SUBSTR(LINE3ADR,3,1) NE '/'
+          AND  SUBSTR(LINE3ADR,4,1) NE '/'
+          AND  SUBSTR(LINE3ADR,5,1) NE '/'
+          AND  SUBSTR(LINE3ADR,1,1) NE '-'
+          AND  SUBSTR(LINE3ADR,2,1) NE '-'
+          AND  SUBSTR(LINE3ADR,3,1) NE '-'
+          AND  SUBSTR(LINE3ADR,4,1) NE '-'
+          AND  SUBSTR(LINE3ADR,5,1) NE '-'
+          AND   SUBSTR(LINE3ADR,6,1) = ' ' THEN DO;
+                NEW_ZIP     = SUBSTR(LINE3ADR,1,5) ;
+                NEW_CITY    = SUBSTR(LINE3ADR,7,25);
+                NEW_COUNTRY = 'MALAYSIA' ;
+     END;
+             /*-------------------*/
+             /* CHECK ADDR LINE 4 */
+             /*-------------------*/
+     ELSE IF    '00001' < SUBSTR(LINE4ADR,1,5) < '99998'
+          AND  SUBSTR(LINE4ADR,6,1) EQ ' '
+          AND  SUBSTR(LINE4ADR,1,1) NE ' '
+          AND  SUBSTR(LINE4ADR,2,1) NE ' '
+          AND  SUBSTR(LINE4ADR,3,1) NE ' '
+          AND  SUBSTR(LINE4ADR,4,1) NE ' '
+          AND  SUBSTR(LINE4ADR,5,1) NE ' '
+          AND  SUBSTR(LINE4ADR,1,1) NE ','
+          AND  SUBSTR(LINE4ADR,2,1) NE ','
+          AND  SUBSTR(LINE4ADR,3,1) NE ','
+          AND  SUBSTR(LINE4ADR,4,1) NE ','
+          AND  SUBSTR(LINE4ADR,5,1) NE ','
+          AND  SUBSTR(LINE4ADR,1,1) NE '&'
+          AND  SUBSTR(LINE4ADR,2,1) NE '&'
+          AND  SUBSTR(LINE4ADR,3,1) NE '&'
+          AND  SUBSTR(LINE4ADR,4,1) NE '&'
+          AND  SUBSTR(LINE4ADR,5,1) NE '&'
+          AND  SUBSTR(LINE4ADR,1,1) NE '/'
+          AND  SUBSTR(LINE4ADR,2,1) NE '/'
+          AND  SUBSTR(LINE4ADR,3,1) NE '/'
+          AND  SUBSTR(LINE4ADR,4,1) NE '/'
+          AND  SUBSTR(LINE4ADR,5,1) NE '/'
+          AND  SUBSTR(LINE4ADR,1,1) NE '-'
+          AND  SUBSTR(LINE4ADR,2,1) NE '-'
+          AND  SUBSTR(LINE4ADR,3,1) NE '-'
+          AND  SUBSTR(LINE4ADR,4,1) NE '-'
+          AND  SUBSTR(LINE4ADR,5,1) NE '-'
+          AND   SUBSTR(LINE4ADR,6,1) = ' ' THEN DO;
+                NEW_ZIP     = SUBSTR(LINE4ADR,1,5) ;
+                NEW_CITY    = SUBSTR(LINE4ADR,7,25);
+                NEW_COUNTRY = 'MALAYSIA' ;
+     END;
+             /*-------------------*/
+             /* CHECK ADDR LINE 5 */
+             /*-------------------*/
+     ELSE IF    '00001' < SUBSTR(LINE5ADR,1,5) < '99998'
+          AND  SUBSTR(LINE5ADR,6,1) EQ ' '
+          AND  SUBSTR(LINE5ADR,1,1) NE ' '
+          AND  SUBSTR(LINE5ADR,2,1) NE ' '
+          AND  SUBSTR(LINE5ADR,3,1) NE ' '
+          AND  SUBSTR(LINE5ADR,4,1) NE ' '
+          AND  SUBSTR(LINE5ADR,5,1) NE ' '
+          AND  SUBSTR(LINE5ADR,1,1) NE ','
+          AND  SUBSTR(LINE5ADR,2,1) NE ','
+          AND  SUBSTR(LINE5ADR,3,1) NE ','
+          AND  SUBSTR(LINE5ADR,4,1) NE ','
+          AND  SUBSTR(LINE5ADR,5,1) NE ','
+          AND  SUBSTR(LINE5ADR,1,1) NE '&'
+          AND  SUBSTR(LINE5ADR,2,1) NE '&'
+          AND  SUBSTR(LINE5ADR,3,1) NE '&'
+          AND  SUBSTR(LINE5ADR,4,1) NE '&'
+          AND  SUBSTR(LINE5ADR,5,1) NE '&'
+          AND  SUBSTR(LINE5ADR,1,1) NE '/'
+          AND  SUBSTR(LINE5ADR,2,1) NE '/'
+          AND  SUBSTR(LINE5ADR,3,1) NE '/'
+          AND  SUBSTR(LINE5ADR,4,1) NE '/'
+          AND  SUBSTR(LINE5ADR,5,1) NE '/'
+          AND  SUBSTR(LINE5ADR,1,1) NE '-'
+          AND  SUBSTR(LINE5ADR,2,1) NE '-'
+          AND  SUBSTR(LINE5ADR,3,1) NE '-'
+          AND  SUBSTR(LINE5ADR,4,1) NE '-'
+          AND  SUBSTR(LINE5ADR,5,1) NE '-'
+          AND   SUBSTR(LINE5ADR,6,1) = ' ' THEN DO;
+                NEW_ZIP     = SUBSTR(LINE5ADR,1,5) ;
+                NEW_CITY    = SUBSTR(LINE5ADR,7,25);
+                NEW_COUNTRY = 'MALAYSIA' ;
+     END;
+
+     RUN;
+   PROC PRINT DATA=ADDR_AELE(OBS=5);TITLE 'ADDR_AELE';RUN;
+
+DATA ADDRAELE1;
+  SET ADDR_AELE;
+     WHERE      ((ADDRLINE NOT CONTAINS 'SINGAPORE'      )
+            AND  (ADDRLINE NOT CONTAINS 'HONG HONG'      )
+            AND  (ADDRLINE NOT CONTAINS 'QATAR'          )
+            AND  (ADDRLINE NOT CONTAINS 'TAMIL NADU'     )
+            AND  (ADDRLINE NOT CONTAINS 'STAFFORDSHIRE'  )
+            AND  (ADDRLINE NOT CONTAINS 'HANOI'          )
+            AND  (ADDRLINE NOT CONTAINS 'VIETNAM'        )
+            AND  (ADDRLINE NOT CONTAINS 'NEW ZEALAND'    )
+            AND  (ADDRLINE NOT CONTAINS 'ENGLAND'        )
+            AND  (ADDRLINE NOT CONTAINS 'AUCKLAND'       )
+            AND  (ADDRLINE NOT CONTAINS 'SHANGHAI'       )
+            AND  (ADDRLINE NOT CONTAINS 'DOHA QATAR'     )
+            AND  (ADDRLINE NOT CONTAINS 'THAILAND'       )
+            AND  (ADDRLINE NOT CONTAINS 'HONG KONG'      )
+            AND  (ADDRLINE NOT CONTAINS 'SEOUL'          )
+            AND  (ADDRLINE NOT CONTAINS '#'              )
+            AND  (ADDRLINE NOT CONTAINS 'NSW'            )
+            AND  (ADDRLINE NOT CONTAINS 'NETHERLANDS'    )
+            AND  (ADDRLINE NOT CONTAINS 'AUSTRALIA'      )
+            AND  (ADDRLINE NOT CONTAINS "S'PORE"         ) );
+      /*  CHECKING FOR EMPTY STATECODE USING ZIPCODE */
+      IF STATEX = '   ' OR STATEX = 'N/A' THEN DO;
+         IF 79000 =< NEW_ZIP =< 86999   THEN STATEX = 'JOH';
+         IF 05000 =< NEW_ZIP =< 09999   THEN STATEX = 'KED';
+         IF 15000 =< NEW_ZIP =< 18999   THEN STATEX = 'KEL';
+         IF 75000 =< NEW_ZIP =< 78999   THEN STATEX = 'MEL';
+         IF 70000 =< NEW_ZIP =< 73999   THEN STATEX = 'NEG';
+         IF 25000 =< NEW_ZIP =< 28999
+         OR 69000 =< NEW_ZIP =< 69000   THEN STATEX = 'PAH';
+         IF 10000 =< NEW_ZIP =< 14999   THEN STATEX = 'PEN';
+         IF 30000 =< NEW_ZIP =< 36999
+         OR 39000 =< NEW_ZIP =< 39999   THEN STATEX = 'PRK';
+         IF 01000 =< NEW_ZIP =< 02999   THEN STATEX = 'PER';
+         IF 88000 =< NEW_ZIP =< 91999   THEN STATEX = 'SAB';
+         IF 93000 =< NEW_ZIP =< 98999   THEN STATEX = 'SAR';
+         IF 40000 =< NEW_ZIP =< 49999
+         OR 63000 =< NEW_ZIP =< 64999
+         OR 68000 =< NEW_ZIP =< 68199   THEN STATEX = 'SEL';
+         IF 20000 =< NEW_ZIP =< 24999   THEN STATEX = 'TER';
+         IF 50000 =< NEW_ZIP =< 60999   THEN STATEX = 'W P';
+         IF 87000 =< NEW_ZIP =< 87999   THEN STATEX = 'LAB';
+         IF 62000 =< NEW_ZIP =< 62999   THEN STATEX = 'PUT';
+     END;
+  RUN;
+PROC PRINT DATA=ADDRAELE1(OBS=5);TITLE 'ADDR + AELE 1';RUN;
+
+DATA OUT;
+  SET ADDRAELE1;
+  FILE OUTFILE;
+  IF _N_ = 1 THEN DO;
+     PUT @01   'CIS #'
+         @12   '-'
+         @13   'ADDR REF'
+         @25   'ADDLINE1'
+         @66   'ADDLINE2'
+         @107  'ADDLINE3'
+         @148  'ADDLINE4'
+         @189  'ADDLINE5'
+         @230  ' '
+         @236  'ZIP'
+         @241  'CITY'
+         @267  'COUNTRY'
+         @279  ' '
+         @285  'ZIP'
+         @291  'CITY'
+         @317  'COUNTRY'     ;
+  END;
+    NEW_ZIP     = LEFT(NEW_ZIP)     ;
+    NEW_CITY    = LEFT(NEW_CITY)    ;
+    NEW_COUNTRY = LEFT(NEW_COUNTRY) ;
+    IF NEW_ZIP = ' ' THEN DELETE;
+     PUT @01   CUSTNO            $11.
+         @12   '-'
+         @13   ADDREF            Z11.
+         @25   LINE1ADR          $40.
+         @66   LINE2ADR          $40.
+         @107  LINE3ADR          $40.
+         @148  LINE4ADR          $40.
+         @189  LINE5ADR          $40.
+         @230  '*OLD*'
+         @236  ZIP               $05.
+         @241  CITY              $25.
+         @267  COUNTRY           $10.
+         @279  '*NEW*'
+         @285  NEW_ZIP           $05.
+         @291  NEW_CITY          $25.
+         @317  STATEX            $3.
+         @321  NEW_COUNTRY       $10. ;
+  RUN;
+
+DATA UPD;          /*    UPDATE FILE */
+  SET ADDRAELE1;
+  FILE UPDFILE;
+    NEW_ZIP     = LEFT(NEW_ZIP)     ;
+    NEW_CITY    = LEFT(NEW_CITY)    ;
+    NEW_COUNTRY = LEFT(NEW_COUNTRY) ;
+    IF NEW_ZIP = ' ' THEN DELETE;
+    NEW_CITY=UPCASE(NEW_CITY);
+     PUT @01   CUSTNO            $11.
+         @12   ADDREF            Z11.
+         @23   NEW_CITY          $25.
+         @48   STATEX            $3.
+         @51   NEW_ZIP           $05.
+         @56   NEW_COUNTRY       $10. ;
+  RETURN;
+  RUN;
+
+

@@ -1,0 +1,103 @@
+//CCRTAX3B JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=64M,NOTIFY=&SYSUID      JOB12129
+//*--------------------------------------------------------------------
+//*-ESMR2013-2339:RETURN LATEST CUSTOMER FOR ALIASES PRIORITY
+//*--------------------------------------------------------------------
+//*--------------------------------------------------------------------
+//*-A2013-00015509 FIX BLANK ALIAS
+//*--------------------------------------------------------------------
+//*--------------------------------------------------------------------
+//*-ESMR2017-3416 POPULATE REFER TO HEAD OFFICE LIST DATABASE (RHOLD)
+//*               INTO SAS DATAWAREHOUSE
+//*--------------------------------------------------------------------
+//TAXIDFIL EXEC SAS609
+//OLDIC    DD DISP=SHR,DSN=RBP2.B033.CCRIS.OLDIC.GDG(0)
+//NEWIC    DD DISP=SHR,DSN=RBP2.B033.CCRIS.ALIAS.GDG(0)
+//CISRHOLD DD DISP=SHR,DSN=RBP2.B033.RHOLD.FULL.LIST
+//TAXFILE  DD DSN=RBP2.B033.CCRIS.TAXID.GDG(+1),
+//            DISP=(NEW,CATLG,DELETE),
+//            SPACE=(CYL,(300,300),RLSE),UNIT=SYSDA,
+//            DCB=(LRECL=133,BLKSIZE=0,RECFM=FB)
+//SASLIST  DD SYSOUT=X
+//SYSIN    DD *
+OPTIONS NOCENTER;
+
+  DATA OLDIC;
+      INFILE OLDIC;
+      INPUT  @01   CUSTNO             $11.
+             @12   CODE_OLD           $01.
+             @13   INDORG             $01.
+             @14   OLDIC              $09.
+             @23   CUSTBRCH           $05.;
+  RUN;
+PROC SORT DATA=OLDIC; BY CUSTNO;RUN;
+PROC PRINT DATA=OLDIC(OBS=1);TITLE 'OLD IC';RUN;
+
+  DATA NEWIC;
+      INFILE NEWIC;
+      FORMAT NEWIC1 $20.;
+      INPUT  @01   CUSTNO             $11.
+             @12   CODE_NEW           $01.
+             @13   NEWIC              $40. /* INCL IND+ORG ALIAS */
+             @53   KEYFIELD1          $15.
+             @68   KEYFIELD2          $10.;
+      NEWIC1 = SUBSTR(NEWIC,4,20);
+  RUN;
+PROC SORT DATA=NEWIC; BY CUSTNO;RUN;
+PROC PRINT DATA=NEWIC(OBS=1);TITLE 'NEW IC';RUN;
+
+  DATA RHOLD;
+      INFILE CISRHOLD;
+      INPUT @545   ID1                $20.
+            @565   ID2                $20.;
+      ALIAS = ID1;
+      IF ALIAS NE '' THEN OUTPUT;
+      ALIAS = ID2;
+      IF ALIAS NE '' THEN OUTPUT;
+      KEEP ALIAS;
+  RUN;
+PROC SORT DATA=RHOLD NODUPKEY; BY ALIAS; RUN;
+PROC PRINT DATA=RHOLD(OBS=1);TITLE 'RHOLD';RUN;
+
+  DATA TAXID;
+      MERGE OLDIC(IN=X) NEWIC(IN=Y); BY CUSTNO;
+      IF X;
+      IF INDORG = 'O' THEN BUSREG=NEWIC;
+  RUN;
+PROC SORT  DATA=TAXID; BY NEWIC1;RUN;
+PROC PRINT DATA=TAXID (OBS=1);TITLE 'TAXID FILE';RUN;
+
+  DATA TAXID_NEWIC;
+      MERGE TAXID(IN=A) RHOLD(IN=B RENAME=(ALIAS=NEWIC1)); BY NEWIC1;
+      IF A;
+      IF A AND B THEN C = 1;
+  RUN;
+PROC SORT DATA=TAXID_NEWIC; BY OLDIC; RUN;
+
+  DATA TAXID_OLDIC;
+      FORMAT OLDIC $20.;
+      MERGE TAXID_NEWIC(IN=D) RHOLD(IN=E RENAME=(ALIAS=OLDIC));
+      BY OLDIC;
+      IF D;
+      IF D AND E THEN F = 1;
+  RUN;
+PROC SORT  DATA=TAXID_OLDIC; BY CUSTNO;RUN;
+
+DATA OUT;
+  SET TAXID_OLDIC;
+  /* MATCH TYPE B=BOTH, N=NEWIC, O=OLDIC, X=XFOUND */
+  IF C = 1  AND F = 1  THEN DO; RHOLD_IND = 'Y'; MATCHID = 'B'; END;
+  IF C = 1  AND F = '' THEN DO; RHOLD_IND = 'Y'; MATCHID = 'N'; END;
+  IF C = '' AND F = 1  THEN DO; RHOLD_IND = 'Y'; MATCHID = 'O'; END;
+  IF MATCHID   = '' THEN MATCHID   = 'X';
+  IF RHOLD_IND = '' THEN RHOLD_IND = 'N';
+  FILE TAXFILE;
+     PUT @ 1   CUSTNO            $11.
+         @12   OLDIC             $20.
+         @32   NEWIC             $23.
+         @55   BUSREG            $23.
+         @78   CUSTBRCH          $ 5.
+         @83   RHOLD_IND         $ 1.
+         @84   MATCHID           $ 1.;
+  RETURN;
+  RUN;
+

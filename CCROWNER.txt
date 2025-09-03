@@ -1,0 +1,175 @@
+//CCROWNER JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=8M,NOTIFY=&SYSUID       JOB51805
+//*---------------------------------------------------------------------
+//*- STEP 1 - GET CA RELATIONSHIP
+//*- STEP 2 - FLIP CC RELATIONSHIP
+//*- STEP 3 - MATCH RECORD WITH CC RELATIONSHIP
+//*- STEP 4 - REMOVING DUPLICATE RECORDS
+//*=====================================================================
+//*--------------------------------------------------------------------
+//*-ESMR2019-4587 NEW SA ACCT RANGE WITH 5 SERIES
+//*-TAG :- 194587
+//*--------------------------------------------------------------------
+//DELETE   EXEC PGM=IEFBR14
+//DEL1     DD DSN=RBP2.B033.CCRIS.CISOWNER,
+//            DISP=(MOD,DELETE,DELETE),SPACE=(TRK,(0))
+//*---------------------------------------------------------------------
+//*- STEP 1 - GET CA RELATIONSHIP
+//*---------------------------------------------------------------------
+//RLEN#CA  EXEC SAS609,REGION=4M,WORK='50000,50000'
+//IEFRDER   DD DUMMY
+//CCRFILE   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CISDEMO.DP.GDG(0)
+//          DD DISP=SHR,DSN=RBP2.B033.CCRIS.CISDEMO.SAFD(0)
+//          DD DISP=SHR,DSN=RBP2.B033.CCRIS.CISDEMO.LN.GDG(0)
+//OUTFILE   DD DISP=(NEW,PASS),DSN=&&RLENCA,
+//             UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//             DCB=(LRECL=150,BLKSIZE=0,RECFM=FB)
+//SASLIST   DD SYSOUT=X
+//SYSIN     DD *
+OPTIONS IMSDEBUG=N YEARCUTOFF=1950 SORTDEV=3390 ERRORS=0;
+OPTIONS NODATE NONUMBER NOCENTER;
+TITLE;
+ /*----------------------------------------------------------------*/
+ /*    DATA DECLARATION                                            */
+ /*----------------------------------------------------------------*/
+ DATA CIS;
+    INFILE CCRFILE;
+    FORMAT ACCTCODE $5.;
+    INPUT @01   ACCTNOC          $11.
+          @01   ACCTNOR          $02.
+          @13   CUSTNO           $11.
+          @25   RLENCODE         $3.
+          @28   PRISEC           $3.;
+  /*IF ACCTNOR IN ('01','03','04','06','07') THEN ACCTCODE = 'DP';*/
+    IF ACCTNOR IN ('01','03','04','05','06','07')  /*194587*/
+       THEN ACCTCODE = 'DP';                       /*194587*/
+    IF ACCTNOR IN ('02','08')                THEN ACCTCODE = 'LN';
+    IF PRISEC = '901';
+
+ PROC SORT DATA=CIS ; BY ACCTNOC; RUN;
+    PROC PRINT DATA=CIS(OBS=5);TITLE 'CIS';RUN;
+ /*----------------------------------------------------------------*/
+ /*   OUTPUT DETAIL REPORT                                         */
+ /*----------------------------------------------------------------*/
+DATA TEMPOUT;
+  SET CIS;
+  FILE OUTFILE;
+     PUT @01   ACCTCODE          $5.
+         @06   ACCTNOC           $20.
+         @26   CUSTNO            $11.
+         @37   RLENCODE          $3.;
+  RETURN;
+  RUN;
+//*---------------------------------------------------------------------
+//*- STEP 2 - FLIP CC RELATIONSHIP
+//*---------------------------------------------------------------------
+//RLEN#CC  EXEC SAS609,REGION=4M,WORK='50000,50000'
+//IEFRDER   DD DUMMY
+//INFILE    DD DISP=SHR,DSN=RBP2.B033.CCRIS.CISRLCC.GDG(0)
+//OUTFILE   DD DISP=(NEW,PASS),DSN=&&RLENCC,
+//             UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//             DCB=(LRECL=150,BLKSIZE=0,RECFM=FB)
+//SASLIST   DD SYSOUT=X
+//SYSIN     DD *
+OPTIONS IMSDEBUG=N YEARCUTOFF=1950 SORTDEV=3390 ERRORS=0;
+OPTIONS NODATE NONUMBER NOCENTER;
+TITLE;
+ /*----------------------------------------------------------------*/
+ /*    DATA DECLARATION                                            */
+ /*----------------------------------------------------------------*/
+ DATA CCRLEN;
+    INFILE INFILE;
+    INPUT @01   CUST1             $11.
+          @21   CODE1             $03.
+          @24   CUST2             $11.
+          @44   CODE2             $03.;
+
+ /*----------------------------------------------------------------*/
+ /*   OUTPUT DETAIL REPORT                                         */
+ /*----------------------------------------------------------------*/
+DATA TEMPOUT;
+  SET CCRLEN;
+  FILE OUTFILE;
+     PUT @01   CUST2             $11.
+         @21   CODE2             $03.
+         @24   CUST1             $11.
+         @44   CODE1             $03.;
+  RETURN;
+  RUN;
+//*---------------------------------------------------------------------
+//*- STEP 3 - MATCH RECORD WITH CC RELATIONSHIP
+//*---------------------------------------------------------------------
+//MATCHING EXEC SAS609,REGION=4M,WORK='50000,50000'
+//IEFRDER   DD DUMMY
+//RLEN#CA   DD DISP=(OLD,DELETE),DSN=&&RLENCA
+//RLEN#CC   DD DISP=SHR,DSN=RBP2.B033.CCRIS.CISRLCC.GDG(0)
+//          DD DISP=(OLD,DELETE),DSN=&&RLENCC
+//OUTFILE   DD DISP=(NEW,PASS),DSN=&&MATCH,
+//             UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//             DCB=(LRECL=150,BLKSIZE=0,RECFM=FB)
+//SASLIST   DD SYSOUT=X
+//SYSIN     DD *
+OPTIONS IMSDEBUG=N YEARCUTOFF=1950 SORTDEV=3390 ERRORS=0;
+OPTIONS NODATE NONUMBER NOCENTER;
+TITLE;
+ /*----------------------------------------------------------------*/
+ /*    DATA DECLARATION                                            */
+ /*----------------------------------------------------------------*/
+ DATA RLENCA;
+    INFILE RLEN#CA;
+    INPUT @01   ACCTCODE          $5.
+          @06   ACCTNOC           $20.
+          @26   CUSTNO            $11.
+          @37   RLENCODE          $3.;
+ PROC SORT  DATA=RLENCA; BY CUSTNO ; RUN;
+
+ DATA RLENCC;
+    INFILE RLEN#CC;
+    INPUT @01   CUSTNO            $11.
+          @21   CODE1             $03.
+          @24   CUSTNO2           $11.
+          @44   CODE2             $03.;
+ PROC SORT  DATA=RLENCC; BY CUSTNO ; RUN;
+
+   PROC SQL;
+   CREATE TABLE MERGE1 AS
+     SELECT RLENCA.ACCTCODE
+           ,RLENCA.ACCTNOC
+           ,RLENCA.CUSTNO
+           ,RLENCA.RLENCODE
+           ,RLENCC.CODE1
+           ,RLENCC.CUSTNO2
+           ,RLENCC.CODE2
+     FROM RLENCA,RLENCC
+     WHERE RLENCA.CUSTNO = RLENCC.CUSTNO;
+ QUIT;
+
+ PROC SORT  DATA=MERGE1; BY ACCTNOC CUSTNO CUSTNO2 ; RUN;
+ /*----------------------------------------------------------------*/
+ /*   OUTPUT DETAIL REPORT                                         */
+ /*----------------------------------------------------------------*/
+DATA TEMPOUT;
+  SET MERGE1;
+  FILE OUTFILE;
+     PUT @01   ACCTCODE          $5.
+         @06   ACCTNOC           $20.
+         @26   RLENCODE          $3.
+         @29   CUSTNO            $11.
+         @40   CODE1             $03.
+         @43   CUSTNO2           $11.
+         @54   CODE2             $03.;
+  RETURN;
+  RUN;
+//*---------------------------------------------------------------------
+//*- STEP 4 - REMOVING DUPLICATE RECORDS
+//*---------------------------------------------------------------------
+//UNQREC   EXEC PGM=ICETOOL
+//TOOLMSG  DD SYSOUT=*
+//DFSMSG   DD SYSOUT=*
+//INDD01   DD DISP=(OLD,DELETE),DSN=&&MATCH
+//OUTDD01  DD DSN=RBP2.B033.CCRIS.CISOWNER,
+//            DISP=(NEW,CATLG,DELETE),
+//            UNIT=SYSDA,SPACE=(CYL,(300,200),RLSE),
+//            DCB=(LRECL=150,BLKSIZE=0,RECFM=FB)
+//TOOLIN   DD *
+   SELECT FROM(INDD01) TO(OUTDD01) ON(1,150,CH) FIRST
+

@@ -1,0 +1,101 @@
+//CCRSADDP JOB MSGCLASS=X,MSGLEVEL=(1,1),REGION=64M,NOTIFY=&SYSUID      JOB14801
+//*--------------------------------------------------------------------
+//* SMR 2024-2309 ADDRESS AND INDICATOR LISTING (DEPOSIT)
+//*--------------------------------------------------------------------
+//INITDASD EXEC PGM=IEFBR14
+//DEL1     DD DSN=RBP2.B033.CIS.CUST.DAILY.ADDRACC,
+//            DISP=(MOD,DELETE,DELETE),UNIT=SYSDA,SPACE=(TRK,(0))
+//*--------------------------------------------------------------------
+//STATS#01 EXEC SAS609
+//SORTWK01  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK02  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK03  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//SORTWK04  DD UNIT=SYSDA,SPACE=(CYL,(1000,500))
+//AOWNFILE DD DISP=SHR,DSN=RBP2.B033.UNLOAD.ADDRAOWN.FB
+//DEPOSIT  DD DISP=SHR,DSN=RBP2.B033.DP.CUST.DAILY.ADDRACC
+//OUTFILE  DD DSN=RBP2.B033.CIS.CUST.DAILY.ADDRACC,
+//            DISP=(NEW,CATLG,DELETE),
+//            SPACE=(CYL,(300,200),RLSE),UNIT=SYSDA,
+//            DCB=(LRECL=400,BLKSIZE=0,RECFM=FB)
+//SASLIST  DD SYSOUT=X
+//SYSIN    DD *
+DATA AOWN;
+   INFILE AOWNFILE;
+   INPUT @001   HOLD_CO_NO      PD2.
+         @003   BANK_NO         PD2.
+         @005   REF_NO          PD6.
+         @011   EFF_DATE        PD5.
+         @016   O_HOLD_CO_NO    PD2.
+         @018   O_BANK_NO       PD2.
+         @020   O_APPL_CODE     $5.
+         @025   ACCTNO          $11.
+         @045   O_REC_TYPE      PD2.
+         @047   PROCESS_TIME    $8.
+         @055   HIST_IND        $1.
+         @056   NA_SAME         $1.
+         @057   NA_LINE_TYP1    $1.
+         @058   NA_LINE_TYP2    $1.
+         @059   NA_LINE_TYP3    $1.
+         @060   NA_LINE_TYP4    $1.
+         @061   NA_LINE_TYP5    $1.
+         @062   NA_LINE_TYP6    $1.
+         @063   NA_LINE_TYP7    $1.
+         @064   NA_LINE_TYP8    $1.
+         @065   NA_FUTUR_IND    $1.
+         ;
+         IF O_APPL_CODE IN ('DP   ');
+         IF ACCTNO    > '010000000000';
+   RUN;
+PROC SORT  DATA=AOWN NODUPKEY;BY ACCTNO   ;RUN;
+PROC PRINT DATA=AOWN(OBS=5);TITLE 'AOWN';RUN;
+
+DATA DPADDR;
+   INFILE DEPOSIT;
+   INPUT @001   ACCTNO          $11.
+         @012   ADD_NAME_1      $40.
+         @052   ADD_NAME_2      $40.
+         @092   ADD_NAME_3      $40.
+         @132   ADD_NAME_4      $40.
+         @172   ADD_NAME_5      $40.
+         @212   ADD_NAME_6      $40.
+         @252   ADD_NAME_7      $40.
+         @292   ADD_NAME_8      $39.
+         ;
+         IF ACCTNO    > '010000000000';
+   RUN;
+PROC SORT  DATA=DPADDR NODUPKEY;BY ACCTNO   ;RUN;
+PROC PRINT DATA=DPADDR(OBS=5);TITLE 'DEPOSIT ADDRESS';RUN;
+
+DATA MERGE;
+     MERGE DPADDR(IN=A) AOWN(IN=B); BY ACCTNO;
+     IF A AND B;
+   RUN;
+PROC SORT  DATA=MERGE ;BY ACCTNO   ;RUN;
+PROC PRINT DATA=MERGE (OBS=5);TITLE 'MERGED';RUN;
+
+DATA OUT;
+     SET MERGE;
+     FILE OUTFILE;
+     PUT @001  O_APPL_CODE     $5.
+         @006  ACCTNO          $20.
+         @026  NA_LINE_TYP1    $1.
+         @027  ADD_NAME_1      $40.
+         @067  NA_LINE_TYP2    $1.
+         @068  ADD_NAME_2      $40.
+         @108  NA_LINE_TYP3    $1.
+         @109  ADD_NAME_3      $40.
+         @149  NA_LINE_TYP4    $1.
+         @150  ADD_NAME_4      $40.
+         @190  NA_LINE_TYP5    $1.
+         @191  ADD_NAME_5      $40.
+         @231  NA_LINE_TYP6    $1.
+         @232  ADD_NAME_6      $40.
+         @272  NA_LINE_TYP7    $1.
+         @273  ADD_NAME_7      $40.
+         @313  NA_LINE_TYP8    $1.
+         @314  ADD_NAME_8      $40.
+         ;
+     RUN;
+PROC SORT  DATA=MERGE ;BY ACCTNO   ;RUN;
+PROC PRINT DATA=MERGE (OBS=5);TITLE 'MERGED';RUN;
+
