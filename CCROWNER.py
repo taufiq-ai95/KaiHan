@@ -1,3 +1,15 @@
+# step 1 - concat three dataset
+#        Dataset:-
+#        RBP2.B033.CCRIS.CISDEMO.DP.GDG(0)
+#        RBP2.B033.CCRIS.CISDEMO.SAFD(0)
+#        RBP2.B033.CCRIS.CISDEMO.LN.GDG(0)
+#
+# Step 2 - flip fields as sas program
+#
+# Step 3 - merge step1 and step2 data
+#
+# Step 4 - remove duplicate
+
 import polars as pl
 
 # =====================================================
